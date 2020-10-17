@@ -1,0 +1,26 @@
+
+$install_nginx = <<-SCRIPT
+sudo apt update -y && sudo apt install -y nginx
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  # define o SO que a vm irá rodar
+  config.vm.box = "ubuntu/bionic64"
+
+  # expoe as portas da VM (Guest) para o PC externo (Host)
+  config.vm.network "forwarded_port", guest: 80, host: 8089
+
+  # defiine um ip de rede de forma dinamica
+  # config.vm.network "private_network", type: "dhcp"
+
+  # define um ip da rede interna de forma estática
+  # config.vm.network "private_network", ip: "192.168.50.4"
+
+  # define uma rede modo bridge para rede publica, por exemplo da empresa, de forma dinamica
+  config.vm.network "public_network"
+  # define uma rede modo bridge para rede publica, por exemplo da empresa, de forma estatica (cuidado com conflito)
+  # config.vm.network "public_network", ip: "192.168.0.51"
+
+  # provisiona um shell para executar um script dentro da vm
+  config.vm.provision "shell", inline: $install_nginx
+end
