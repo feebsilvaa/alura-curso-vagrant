@@ -1,0 +1,47 @@
+
+$install_nginx = <<-SCRIPT
+  echo '=== Install Nginx ==='
+  apt update -y && apt install -y nginx
+SCRIPT
+
+$install_mysql_server_57 = <<-SCRIPT
+  echo '=== Install Mysql Server 5.7 ==='
+  apt update -y && \ 
+  apt install -y mysql-server-5.7 && \
+  mysql -e "create user 'phpuser'@'%' identified by 'pass';"
+SCRIPT
+
+$copy_mysqld_cnf = <<-SCRIPT 
+  echo '=== Copying myqsld.cnf ==='
+  cat /config/mysqld.cnf > /etc/mysql/mysql.conf.d/mysqld.cnf && \
+  service mysql restart
+SCRIPT
+
+$copy_pub_ssh_key = <<-SCRIPT 
+  echo '=== Copying pub ssh key ==='
+  cat /config/id_bionic.pub >> .ssh/authorized_keys
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  # define o SO que a vm irá rodar
+  config.vm.box = "ubuntu/bionic64"
+
+  config.vm.define "mysqldb" do |mysql|
+    mysql.vm.network "forwarded_port", guest: 3306, host: 33062
+    mysql.vm.network "public_network", ip: "192.168.0.58"
+    mysql.vm.synced_folder "./config", "/config"
+    mysql.vm.synced_folder ".", "/vagrant", disabled: true
+    mysql.vm.provision "shell", inline: $install_mysql_server_57
+    mysql.vm.provision "shell", inline: $copy_mysqld_cnf
+    mysql.vm.provision "shell", inline: $copy_pub_ssh_key
+  end
+
+  config.vm.define "phpweb" do |phpweb|
+    phpweb.vm.network "forwarded_port", guest: 80, host: 8090
+    phpweb.vm.network "public_network", ip: "192.168.0.59"
+    phpweb.vm.synced_folder "./config", "/config"
+    phpweb.vm.synced_folder ".", "/vagrant", disabled: true
+    phpweb.vm.provision "shell", inline: $copy_pub_ssh_key
+  end
+
+end
