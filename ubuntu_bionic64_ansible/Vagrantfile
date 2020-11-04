@@ -1,0 +1,104 @@
+
+$install_nginx = <<-SCRIPT
+  echo '=== Install Nginx ==='
+  apt update -y && apt install -y nginx
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$install_mysql_server_57 = <<-SCRIPT
+  echo '=== Install Mysql Server 5.7 ==='
+  apt update -y && \ 
+  apt install -y mysql-server-5.7 && \
+  mysql -e "create user 'phpuser'@'%' identified by 'pass';"
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$copy_mysqld_cnf = <<-SCRIPT 
+  echo '=== Copying myqsld.cnf ==='
+  cat /config/mysqld.cnf > /etc/mysql/mysql.conf.d/mysqld.cnf && \
+  service mysql restart
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$copy_pub_ssh_key = <<-SCRIPT 
+  echo '=== Copying pub ssh key ==='
+  cat /config/id_bionic.pub >> .ssh/authorized_keys
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$copy_priv_ssh_key = <<-SCRIPT 
+  echo '=== Copying private ssh key ==='
+  cp /vagrant/id_bionic /home/vagrant && \
+  chmod 600 /home/vagrant/id_bionic
+  chown vagrant:vagrant /home/vagrant/id_bionic
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$puppet_install = <<-SCRIPT
+  echo '=== Installing Puppet ==='
+  apt update && \
+  apt install -y puppet
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$ansible_install = <<-SCRIPT
+  echo '=== Installing Ansible ==='
+  apt update && \
+  apt install -y software-properties-common && \
+  sudo -E apt-add-repository --yes --update ppa:ansible/ansible && \
+  apt install -y ansible
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+$ansible_run_playbook_mysql_server = <<-SCRIPT
+  echo '=== Installing MySql Server Through Ansible VM ==='
+  ansible-playbook -i \
+  /vagrant/config/ansible/hosts \
+  /vagrant/config/ansible/playbook.yml
+  echo 'Done'
+  echo '=============================='
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  # define o SO que a vm irá rodar
+  config.vm.box = "ubuntu/bionic64"
+
+  config.vm.define "mysqlserver" do |mysqlserver|
+    # mysqlserver.vm.network "forwarded_port", guest: 3306, host: 33063
+    mysqlserver.vm.network "public_network", ip: "192.168.0.61", bridge: "en0: Wi-Fi (Wireless)"
+    mysqlserver.vm.synced_folder "./config", "/config"
+    mysqlserver.vm.synced_folder ".", "/vagrant", disabled: true
+    mysqlserver.vm.provision "shell", inline: $copy_pub_ssh_key
+  end
+
+  config.vm.define "ansible" do |ansible|
+    # ansible.vm.network "forwarded_port", guest: 3306, host: 33062
+    ansible.vm.network "public_network", ip: "192.168.0.60", bridge: "en0: Wi-Fi (Wireless)"
+    ansible.vm.provision "shell", inline: $copy_priv_ssh_key
+    ansible.vm.provision "shell", inline: $ansible_install
+    ansible.vm.provision "shell", inline: $ansible_run_playbook_mysql_server
+  end
+
+  config.vm.define "phpweb" do |phpweb|
+    phpweb.vm.network "forwarded_port", guest: 8888, host: 8889
+    phpweb.vm.network "public_network", ip: "192.168.0.63", bridge: "en0: Wi-Fi (Wireless)"
+    phpweb.vm.synced_folder "./config", "/config"
+    phpweb.vm.synced_folder "./src", "/my_app/src"
+    phpweb.vm.synced_folder ".", "/vagrant", disabled: true
+    phpweb.vm.provision "shell", inline: $copy_pub_ssh_key
+    phpweb.vm.provision "shell", inline: $puppet_install
+
+    phpweb.vm.provision "puppet" do |puppet|
+      puppet.manifests_path = "./config/manifests"
+      puppet.manifest_file = "phpweb.pp"
+    end
+  end
+
+end
